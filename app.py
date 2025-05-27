@@ -2,12 +2,15 @@ from typing import TypedDict, Annotated
 from dotenv import load_dotenv
 from langchain_tavily import TavilySearch
 from langchain.chat_models import init_chat_model
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.message import add_messages
 from langgraph.graph import StateGraph, START
 from langgraph.prebuilt import ToolNode, tools_condition
 
 
 load_dotenv()
+
+memory = MemorySaver()
 
 tool = TavilySearch(max_results=2)
 tools = [tool]
@@ -37,14 +40,17 @@ graph_builder.add_conditional_edges("chatbot", tools_condition)
 graph_builder.add_edge("tools", "chatbot")
 graph_builder.add_edge(START, "chatbot")
 
-graph = graph_builder.compile()
+graph = graph_builder.compile(checkpointer=memory)
+
+
+config = {"configurable": {"thread_id": "1"}}
 
 
 def stream_graph_updates(user_input: str):
     for event in graph.stream(
-            {"messages": [{"role": "user", "content": user_input}]}):
-        for value in event.values():
-            print("Assistant:", value["messages"][-1].content)
+            {"messages": [{"role": "user", "content": user_input}]},
+            config=config, stream_mode="values"):
+        event["messages"][-1].pretty_print()
 
 
 if __name__ == "__main__":
